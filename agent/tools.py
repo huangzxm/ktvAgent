@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # 添加上级目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from milvus_db.milvus_lite import MilvusVectorDB, COLLECTION_NAMES
+from vector_db.faiss_db import FAISSVectorDB, COLLECTION_NAMES
 
 # 加载环境变量
 load_dotenv()
@@ -24,7 +24,7 @@ load_dotenv()
 
 class AgentTools:
     def __init__(self):
-        self.vector_db = MilvusVectorDB()
+        self.vector_db = FAISSVectorDB()
 
     def search_device_guide(self, query: str, top_k: int = 3) -> Dict[str, Any]:
         """

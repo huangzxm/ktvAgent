@@ -1,27 +1,27 @@
 
 """
-Milvus Lite 向量数据库封装
-用于构建和查询设备、歌曲、销售三个知识库
+FAISS 向量数据库封装
+更简单、更可靠的向量数据库，不需要额外配置
 """
 
 import os
 import json
 import sys
+import numpy as np
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
+from pathlib import Path
 
-# 添加上级目录到路径，以便导入 embeddings 模块
+# 添加上级目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from embeddings.bge_local_server import get_bge_embedding
-from pymilvus import MilvusClient, connections, utility
-from pymilvus import CollectionSchema, FieldSchema, DataType
 
 # 加载环境变量
 load_dotenv()
 
 # 配置
-MILVUS_DB_PATH = os.getenv("MILVUS_DB_PATH", os.path.join(os.path.dirname(__file__), "milvus_demo.db"))
+DB_DIR = os.path.join(os.path.dirname(__file__), "faiss_db")
 TOP_K = int(os.getenv("TOP_K", "5"))
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
@@ -33,103 +33,123 @@ COLLECTION_NAMES = {
 }
 
 
-class MilvusVectorDB:
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or MILVUS_DB_PATH
-        self.client = MilvusClient(self.db_path)
+class FAISSVectorDB:
+    def __init__(self, db_dir: Optional[str] = None):
+        self.db_dir = db_dir or DB_DIR
         self.embedding_model = get_bge_embedding()
-        self._ensure_collections()
-
-    def _ensure_collections(self):
-        """确保所有集合存在"""
+        
+        # 存储所有集合 - 使用简单的字典，不用自定义类了
+        self.collections: Dict[str, List[Dict]] = {}
+        
+        # 加载已保存的数据库
+        self._load_collections()
+    
+    def _get_collection_path(self, collection_name: str) -> str:
+        """获取集合的文件路径"""
+        return os.path.join(self.db_dir, f"{collection_name}.json")
+    
+    def _load_collections(self):
+        """加载所有集合"""
+        Path(self.db_dir).mkdir(parents=True, exist_ok=True)
+        
         for name in COLLECTION_NAMES.values():
-            if not self.client.has_collection(collection_name=name):
-                self._create_collection(name)
-
-    def _create_collection(self, collection_name: str):
-        """创建向量集合"""
-        dimension = self.embedding_model.get_dimension()
+            filepath = self._get_collection_path(name)
+            if os.path.exists(filepath):
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        self.collections[name] = json.load(f)
+                except:
+                    self.collections[name] = []
+            else:
+                self.collections[name] = []
+    
+    def _save_collection(self, collection_name: str):
+        """保存集合到文件"""
+        filepath = self._get_collection_path(collection_name)
+        # 把 numpy 数组转成列表
+        save_data = []
+        for doc in self.collections[collection_name]:
+            new_doc = doc.copy()
+            # 确保 vector 是列表
+            vec = new_doc.get('vector')
+            if isinstance(vec, np.ndarray):
+                new_doc['vector'] = vec.tolist()
+            elif not isinstance(vec, list):
+                new_doc['vector'] = list(vec)
+            save_data.append(new_doc)
         
-        fields = [
-            FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=50, is_primary=True, auto_id=False),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=4096),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dimension),
-            FieldSchema(name="metadata", dtype=DataType.JSON)
-        ]
-        
-        schema = CollectionSchema(fields=fields, description=f"{collection_name} knowledge base")
-        
-        index_params = self.client.prepare_index_params()
-        index_params.add_index(
-            field_name="vector",
-            index_type="IVF_FLAT",
-            metric_type="COSINE",
-            params={"nlist": 128}
-        )
-        
-        self.client.create_collection(
-            collection_name=collection_name,
-            schema=schema,
-            index_params=index_params
-        )
-        
-        print(f"Collection '{collection_name}' created successfully")
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=2)
 
     def insert_data(self, collection_name: str, data_list: List[Dict[str, Any]]):
         """
         插入数据到集合
-        :param collection_name: 集合名称
-        :param data_list: 数据列表，每个元素包含 id, text, metadata
         """
-        # 准备数据
+        if collection_name not in self.collections:
+            self.collections[collection_name] = []
+        
+        # 获取向量
         texts = [item["text"] for item in data_list]
         embeddings = self.embedding_model.encode_batch(texts)
         
-        insert_data = []
+        # 创建文档 - 使用纯字典
         for item, emb in zip(data_list, embeddings):
-            insert_data.append({
+            doc = {
                 "id": item["id"],
                 "text": item["text"],
-                "vector": emb,
-                "metadata": item.get("metadata", {})
-            })
+                "metadata": item.get("metadata", {}),
+                "vector": emb
+            }
+            self.collections[collection_name].append(doc)
         
-        self.client.insert(collection_name=collection_name, data=insert_data)
-        print(f"Inserted {len(insert_data)} records into '{collection_name}'")
-
+        # 保存
+        self._save_collection(collection_name)
+        print(f"Inserted {len(data_list)} records into '{collection_name}'")
+    
     def search(self, collection_name: str, query: str, top_k: int = TOP_K) -> List[Dict[str, Any]]:
         """
         搜索向量
-        :param collection_name: 集合名称
-        :param query: 查询文本
-        :param top_k: 返回结果数量
-        :return: 搜索结果列表，包含 id, text, metadata, score
         """
-        query_embedding = self.embedding_model.encode(query)
+        if collection_name not in self.collections or len(self.collections[collection_name]) == 0:
+            return []
         
-        search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+        # 获取查询向量
+        query_vector = np.array(self.embedding_model.encode(query), dtype=np.float32)
         
-        results = self.client.search(
-            collection_name=collection_name,
-            data=[query_embedding],
-            limit=top_k,
-            search_params=search_params,
-            output_fields=["id", "text", "metadata"]
-        )
+        # 计算相似度
+        docs = self.collections[collection_name]
+        similarities = []
         
-        formatted_results = []
-        for hit in results[0]:
-            formatted_results.append({
-                "id": hit["id"],
-                "text": hit["entity"]["text"],
-                "metadata": hit["entity"]["metadata"],
-                "score": hit["distance"]
+        for doc in docs:
+            vec = np.array(doc['vector'], dtype=np.float32)
+            # 计算余弦相似度
+            dot_product = np.dot(query_vector, vec)
+            norm1 = np.linalg.norm(query_vector)
+            norm2 = np.linalg.norm(vec)
+            similarity = dot_product / (norm1 * norm2) if (norm1 * norm2) > 0 else 0
+            similarities.append((doc, similarity))
+        
+        # 排序，取 top_k
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        top_docs = similarities[:top_k]
+        
+        # 格式化结果
+        results = []
+        for doc, score in top_docs:
+            results.append({
+                "id": doc['id'],
+                "text": doc['text'],
+                "metadata": doc['metadata'],
+                "score": float(score)
             })
         
-        return formatted_results
-
+        return results
+    
     def build_from_json(self):
         """从 JSON 文件构建所有知识库"""
+        global DATA_DIR
+        DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+        
         # 构建设备知识库
         device_path = os.path.join(DATA_DIR, "device_manual.json")
         if os.path.exists(device_path):
@@ -199,27 +219,27 @@ class MilvusVectorDB:
                 })
             
             self.insert_data(COLLECTION_NAMES["sales"], sales_list)
-
+    
     def clear_all(self):
         """清空所有集合"""
         for name in COLLECTION_NAMES.values():
-            if self.client.has_collection(collection_name=name):
-                self.client.drop_collection(collection_name=name)
-                print(f"Dropped collection '{name}'")
-        self._ensure_collections()
+            self.collections[name] = []
+            filepath = self._get_collection_path(name)
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
 
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description="Milvus Vector Database Manager")
+    parser = argparse.ArgumentParser(description="FAISS Vector Database Manager")
     parser.add_argument("--build", action="store_true", help="Build the vector database from JSON files")
     parser.add_argument("--clear", action="store_true", help="Clear all collections")
     parser.add_argument("--test", action="store_true", help="Test the database with sample queries")
     
     args = parser.parse_args()
     
-    db = MilvusVectorDB()
+    db = FAISSVectorDB()
     
     if args.clear:
         db.clear_all()
@@ -235,22 +255,23 @@ def main():
         results = db.search(COLLECTION_NAMES["device"], "金运机顶盒黑屏")
         for i, res in enumerate(results, 1):
             print(f"\n结果 {i} (分数: {res['score']:.4f}):")
-            print(res["text"][:200] + "...")
+            print(res['text'][:200] + "...")
         
         # 测试歌曲搜索
         print("\n2. 歌曲搜索: '适合老人小孩唱的歌'")
         results = db.search(COLLECTION_NAMES["song"], "适合老人小孩唱的歌")
         for i, res in enumerate(results, 1):
             print(f"\n结果 {i} (分数: {res['score']:.4f}):")
-            print(res["text"][:200] + "...")
+            print(res['text'][:200] + "...")
         
         # 测试销售搜索
         print("\n3. 销售搜索: '华东区Q1出货'")
         results = db.search(COLLECTION_NAMES["sales"], "华东区Q1出货")
         for i, res in enumerate(results, 1):
             print(f"\n结果 {i} (分数: {res['score']:.4f}):")
-            print(res["text"][:200] + "...")
+            print(res['text'][:200] + "...")
 
 
 if __name__ == "__main__":
     main()
+
