@@ -130,6 +130,31 @@ class AgentTools:
             "product_results": product_results
         }
 
+    def get_after_sales_trends(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+        """
+        售后趋势分析工具。面向 B 端（销售经理、渠道商）的售后预警与质量评估检索器。
+        从 sales_kb 中提取指定机型或区域的退货率、故障率、批量客诉记录及售后处理进度。
+        
+        :param query: 查询需求（完整的用户问题，例如：美视清Pro华南区退货率、最近有哪些批量客诉）
+        :param top_k: 返回结果数量
+        :return: 售后趋势数据
+        """
+        # 优先搜索售后、退货、客诉、故障相关内容
+        enhanced_query = f"售后 退货率 客诉 故障率 {query}"
+        results = self.vector_db.search(COLLECTION_NAMES["sales"], enhanced_query, top_k=top_k)
+        
+        context = "\n".join([
+            f"【售后数据 {i+1}】\n{res['text']}\n"
+            for i, res in enumerate(results)
+        ])
+        
+        return {
+            "tool": "get_after_sales_trends",
+            "query": query,
+            "context": context,
+            "results": results
+        }
+
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """
         获取工具定义，供 LLM 使用
@@ -192,6 +217,23 @@ class AgentTools:
                 "function": {
                     "name": "compare_competitor_strategy",
                     "description": "用于竞品对比与策略分析。当用户询问竞品对比、如何抢竞品客户、产品差异化策略等问题时调用此工具。此工具会同时查询竞品信息和雷石自身产品卖点，提供跨库联动的业务决策支持。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "完整的用户问题，不要做任何修改，直接传入用户的原始问题"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_after_sales_trends",
+                    "description": "用于售后趋势分析。面向 B 端（销售经理、渠道商）的售后预警与质量评估工具。当用户询问退货率、故障率、批量客诉记录、售后处理进度等产品后端质量相关问题时调用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {

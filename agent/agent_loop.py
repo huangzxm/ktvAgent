@@ -38,6 +38,7 @@ class KaraokeAssistantAgent:
 2. 智能选歌推荐：根据用户的场合、难度、风格、练唱目标等需求推荐合适的歌曲
 3. 销售数据分析：为内部销售经理、渠道商提供区域出货、渠道表现、产品销售等业务数据查询
 4. 竞品对比与策略分析：不仅查询竞品信息，还结合雷石自身产品优势，生成对比分析和应对策略（跨库联动）
+5. 售后趋势分析：面向 B 端（销售经理、渠道商）的售后预警与质量评估，提供退货率、故障率、批量客诉记录等
 
 【绝对必须遵守的规则】
 1. 对于复合问题（同时涉及多个方面），必须同时调用所有相关工具！绝对不能只调用其中一个！
@@ -50,9 +51,11 @@ class KaraokeAssistantAgent:
 2. 对于涉及竞品对比、如何抢竞品客户、产品差异化策略等问题，必须调用 compare_competitor_strategy 工具！
    - 这个工具会同时查询竞品信息和雷石自身产品卖点，提供跨库联动的业务决策支持
 
-3. 每个工具都必须传入用户的完整原始问题，不要做任何修改或截断！
+3. 对于涉及退货率、故障率、批量客诉、售后处理进度等问题，必须调用 get_after_sales_trends 工具！
 
-4. 工具调用后，要整合所有工具返回的信息，不要遗漏！
+4. 每个工具都必须传入用户的完整原始问题，不要做任何修改或截断！
+
+5. 工具调用后，要整合所有工具返回的信息，不要遗漏！
 
 回答要求：
 - 用简洁明了的语言回答
@@ -107,6 +110,8 @@ class KaraokeAssistantAgent:
                     result = self.tools.query_sales_data(**function_args)
                 elif function_name == "compare_competitor_strategy":
                     result = self.tools.compare_competitor_strategy(**function_args)
+                elif function_name == "get_after_sales_trends":
+                    result = self.tools.get_after_sales_trends(**function_args)
                 else:
                     result = {"error": f"Unknown tool: {function_name}"}
                 
