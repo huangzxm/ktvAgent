@@ -89,27 +89,45 @@ class AgentTools:
             "results": results
         }
 
-    def analyze_competitors(self, query: str, top_k: int = 4) -> Dict[str, Any]:
+    def compare_competitor_strategy(self, query: str, top_k: int = 4) -> Dict[str, Any]:
         """
-        竞品分析工具，查询竞品动态、优劣势对比等信息
-        :param query: 分析需求（完整的用户问题，例如：主要竞品有哪些、全民K歌和雷石对比）
-        :param top_k: 返回结果数量
-        :return: 分析结果
-        """
-        # 优先搜索竞品相关内容
-        enhanced_query = f"竞品分析 {query}"
-        results = self.vector_db.search(COLLECTION_NAMES["sales"], enhanced_query, top_k=top_k)
+        竞品对比与策略分析工具。不仅查询竞品信息，还结合自身产品优势，生成对比分析和应对策略。
+        跨库联动：同时检索 sales_kb（竞品数据）和 device_kb（自身产品卖点）。
         
-        context = "\n".join([
+        :param query: 分析需求（完整的用户问题，例如：全民K歌音响和我们雷石比怎么抢他们的客户）
+        :param top_k: 返回结果数量
+        :return: 对比分析和应对策略
+        """
+        # 1. 从 sales_kb 检索竞品数据
+        competitor_query = f"竞品分析 {query}"
+        competitor_results = self.vector_db.search(COLLECTION_NAMES["sales"], competitor_query, top_k=top_k)
+        
+        # 2. 从 device_kb 检索自身产品功能卖点
+        product_query = f"产品功能 卖点 {query}"
+        product_results = self.vector_db.search(COLLECTION_NAMES["device"], product_query, top_k=top_k)
+        
+        # 3. 组合上下文
+        competitor_context = "\n".join([
             f"【竞品信息 {i+1}】\n{res['text']}\n"
-            for i, res in enumerate(results)
+            for i, res in enumerate(competitor_results)
         ])
         
+        product_context = "\n".join([
+            f"【雷石产品卖点 {i+1}】\n{res['text']}\n"
+            for i, res in enumerate(product_results)
+        ])
+        
+        combined_context = f"""{competitor_context}
+
+{product_context}
+"""
+        
         return {
-            "tool": "analyze_competitors",
+            "tool": "compare_competitor_strategy",
             "query": query,
-            "context": context,
-            "results": results
+            "context": combined_context,
+            "competitor_results": competitor_results,
+            "product_results": product_results
         }
 
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
@@ -172,8 +190,8 @@ class AgentTools:
             {
                 "type": "function",
                 "function": {
-                    "name": "analyze_competitors",
-                    "description": "用于竞品分析。当用户询问竞品动态、市场份额、优劣势对比等信息时调用此工具。",
+                    "name": "compare_competitor_strategy",
+                    "description": "用于竞品对比与策略分析。当用户询问竞品对比、如何抢竞品客户、产品差异化策略等问题时调用此工具。此工具会同时查询竞品信息和雷石自身产品卖点，提供跨库联动的业务决策支持。",
                     "parameters": {
                         "type": "object",
                         "properties": {

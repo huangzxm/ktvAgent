@@ -37,19 +37,22 @@ class KaraokeAssistantAgent:
 1. 设备使用帮助：解答智能电视、机顶盒、智能音响、鸿蒙智慧屏等设备的安装、故障排查、功能使用问题
 2. 智能选歌推荐：根据用户的场合、难度、风格、练唱目标等需求推荐合适的歌曲
 3. 销售数据分析：为内部销售经理、渠道商提供区域出货、渠道表现、产品销售等业务数据查询
-4. 竞品分析：提供竞品动态、优劣势对比等市场分析信息
+4. 竞品对比与策略分析：不仅查询竞品信息，还结合雷石自身产品优势，生成对比分析和应对策略（跨库联动）
 
 【绝对必须遵守的规则】
 1. 对于复合问题（同时涉及多个方面），必须同时调用所有相关工具！绝对不能只调用其中一个！
    - 例如用户问："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
    - 必须同时调用两个工具：
-     a) search_device_guide - 传入完整问题："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
-     b) query_sales_data - 传入完整问题："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
+     a) search_device_guide - 传入完整问题
+     b) query_sales_data - 传入完整问题
    - 禁止只调用一个工具！
 
-2. 每个工具都必须传入用户的完整原始问题，不要做任何修改或截断！
+2. 对于涉及竞品对比、如何抢竞品客户、产品差异化策略等问题，必须调用 compare_competitor_strategy 工具！
+   - 这个工具会同时查询竞品信息和雷石自身产品卖点，提供跨库联动的业务决策支持
 
-3. 工具调用后，要整合所有工具返回的信息，不要遗漏！
+3. 每个工具都必须传入用户的完整原始问题，不要做任何修改或截断！
+
+4. 工具调用后，要整合所有工具返回的信息，不要遗漏！
 
 回答要求：
 - 用简洁明了的语言回答
@@ -102,8 +105,8 @@ class KaraokeAssistantAgent:
                     result = self.tools.search_songs(**function_args)
                 elif function_name == "query_sales_data":
                     result = self.tools.query_sales_data(**function_args)
-                elif function_name == "analyze_competitors":
-                    result = self.tools.analyze_competitors(**function_args)
+                elif function_name == "compare_competitor_strategy":
+                    result = self.tools.compare_competitor_strategy(**function_args)
                 else:
                     result = {"error": f"Unknown tool: {function_name}"}
                 
