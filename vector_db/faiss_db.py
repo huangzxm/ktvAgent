@@ -27,9 +27,9 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
 # 集合名称
 COLLECTION_NAMES = {
-    "device": "device_manual",
-    "song": "song_knowledge",
-    "sales": "sales_data"
+    "device": "device_kb",
+    "song": "song_kb",
+    "sales": "sales_kb"
 }
 
 
