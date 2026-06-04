@@ -29,7 +29,7 @@ class AgentTools:
     def search_device_guide(self, query: str, top_k: int = 3) -> Dict[str, Any]:
         """
         搜索设备指南，用于解答设备使用、安装、故障排查等问题
-        :param query: 用户问题
+        :param query: 用户问题（完整的用户问题）
         :param top_k: 返回结果数量
         :return: 搜索结果
         """
@@ -50,7 +50,7 @@ class AgentTools:
     def search_songs(self, query: str, top_k: int = 5) -> Dict[str, Any]:
         """
         搜索歌曲库，根据用户需求推荐合适的歌曲
-        :param query: 用户需求描述（如：适合老人小孩唱的歌、练气息的歌）
+        :param query: 用户需求描述（完整的用户问题，例如：适合老人小孩唱的歌）
         :param top_k: 返回结果数量
         :return: 搜索结果
         """
@@ -71,7 +71,7 @@ class AgentTools:
     def query_sales_data(self, query: str, top_k: int = 3) -> Dict[str, Any]:
         """
         查询销售数据，包括区域出货、渠道表现、产品销售情况等
-        :param query: 查询需求（如：华东区Q1出货、美视清系列销售）
+        :param query: 查询需求（完整的用户问题，例如：华东区Q1智能音响出货、美视清Pro退货率）
         :param top_k: 返回结果数量
         :return: 搜索结果
         """
@@ -92,7 +92,7 @@ class AgentTools:
     def analyze_competitors(self, query: str, top_k: int = 4) -> Dict[str, Any]:
         """
         竞品分析工具，查询竞品动态、优劣势对比等信息
-        :param query: 分析需求（如：主要竞品有哪些、全民K歌优势劣势）
+        :param query: 分析需求（完整的用户问题，例如：主要竞品有哪些、全民K歌和雷石对比）
         :param top_k: 返回结果数量
         :return: 分析结果
         """
@@ -122,13 +122,13 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "search_device_guide",
-                    "description": "搜索设备知识库，解答设备安装、故障排查、功能使用等问题，适用于用户询问智能电视、机顶盒、智能音响、鸿蒙智慧屏等设备相关问题",
+                    "description": "用于解答设备相关问题。当用户询问智能电视、机顶盒、智能音响、鸿蒙智慧屏等设备的安装、故障排查、功能使用时调用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "用户的具体问题描述，如：'金运机顶盒黑屏怎么办'、'鸿蒙智慧屏怎么开启AI评分'"
+                                "description": "完整的用户问题，不要做任何修改，直接传入用户的原始问题"
                             }
                         },
                         "required": ["query"]
@@ -139,13 +139,13 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "search_songs",
-                    "description": "搜索歌曲库，根据用户需求推荐合适的歌曲，可按场合、难度、风格、练唱目标等条件推荐",
+                    "description": "用于推荐歌曲。当用户希望根据场合、难度、风格、练唱目标等条件推荐歌曲时调用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "用户的歌曲需求描述，如：'适合老人小孩合唱的简单歌曲'、'适合练气息的流行女声'"
+                                "description": "完整的用户问题，不要做任何修改，直接传入用户的原始问题"
                             }
                         },
                         "required": ["query"]
@@ -156,13 +156,13 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "query_sales_data",
-                    "description": "查询销售数据知识库，获取区域出货量、渠道商表现、产品销售情况等业务信息，适用于销售经理、渠道商等内部用户",
+                    "description": "用于查询销售数据。当用户询问区域出货量、渠道表现、产品销售情况等业务数据时调用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "业务查询需求，如：'华东区Q1智能音响出货量'、'美视清Pro退货率'"
+                                "description": "完整的用户问题，不要做任何修改，直接传入用户的原始问题"
                             }
                         },
                         "required": ["query"]
@@ -173,13 +173,13 @@ class AgentTools:
                 "type": "function",
                 "function": {
                     "name": "analyze_competitors",
-                    "description": "竞品分析工具，查询竞品动态、市场份额、优劣势对比等信息，辅助制定市场策略",
+                    "description": "用于竞品分析。当用户询问竞品动态、市场份额、优劣势对比等信息时调用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "竞品分析需求，如：'主要竞品有哪些'、'全民K歌和雷石对比'"
+                                "description": "完整的用户问题，不要做任何修改，直接传入用户的原始问题"
                             }
                         },
                         "required": ["query"]

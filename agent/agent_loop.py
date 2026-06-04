@@ -39,18 +39,23 @@ class KaraokeAssistantAgent:
 3. 销售数据分析：为内部销售经理、渠道商提供区域出货、渠道表现、产品销售等业务数据查询
 4. 竞品分析：提供竞品动态、优劣势对比等市场分析信息
 
-你可以根据用户问题自主判断调用哪些工具，也可以同时调用多个工具来解答复杂问题。
+【绝对必须遵守的规则】
+1. 对于复合问题（同时涉及多个方面），必须同时调用所有相关工具！绝对不能只调用其中一个！
+   - 例如用户问："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
+   - 必须同时调用两个工具：
+     a) search_device_guide - 传入完整问题："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
+     b) query_sales_data - 传入完整问题："美视清蓝牙连接问题很多，帮我整理一下解决办法，顺便看看华南区这款产品的销售情况"
+   - 禁止只调用一个工具！
+
+2. 每个工具都必须传入用户的完整原始问题，不要做任何修改或截断！
+
+3. 工具调用后，要整合所有工具返回的信息，不要遗漏！
 
 回答要求：
 - 用简洁明了的语言回答
 - 引用工具返回的信息时要自然
-- 对于 C 端用户，语气友好、有帮助
-- 对于 B 端用户，语气专业、数据准确
-- 如果问题超出知识范围，诚实地告诉用户
-
-注意：
-- 当用户同时询问设备问题和销售数据时，需要调用多个工具
-- 优先使用工具获取信息，不要编造内容
+- 不同部分用清晰的标题或分段分开
+- 确保包含所有工具的结果！
 """
 
     def reset_conversation(self):
@@ -67,8 +72,8 @@ class KaraokeAssistantAgent:
         params = {
             "model": "GLM-4-Flash",
             "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "temperature": 0.5,
+            "max_tokens": 3000
         }
         
         if use_tools:
@@ -130,11 +135,69 @@ class KaraokeAssistantAgent:
             "content": user_input
         })
         
-        # 构建消息
-        messages = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
+        # 检测复合问题 - 强制调用多个工具
+        is_compound = False
+        tools_to_call = []
         
-        # 第一次调用 LLM，可能会触发工具调用
-        response = self._call_llm(messages, use_tools=True)
+        # 检测是否同时需要设备帮助和销售数据
+        keywords_device = ["设备", "机顶盒", "音响", "智慧屏", "安装", "故障", "连接", "蓝牙", "黑屏"]
+        keywords_sales = ["销售", "出货", "渠道", "数据", "华南", "华东", "华北", "Q1", "Q2", "美视清"]
+        
+        has_device = any(k in user_input for k in keywords_device)
+        has_sales = any(k in user_input for k in keywords_sales)
+        
+        if has_device and has_sales:
+            print("\n[调试: 检测到复合问题，强制调用两个工具！]")
+            is_compound = True
+            # 强制创建工具调用，不依赖 LLM 的判断
+            import uuid
+            tool1_id = str(uuid.uuid4())
+            tool2_id = str(uuid.uuid4())
+            
+            # 调用 search_device_guide
+            tools_to_call.append({
+                "id": tool1_id,
+                "function": {
+                    "name": "search_device_guide",
+                    "arguments": json.dumps({"query": user_input})
+                }
+            })
+            
+            # 调用 query_sales_data
+            tools_to_call.append({
+                "id": tool2_id,
+                "function": {
+                    "name": "query_sales_data",
+                    "arguments": json.dumps({"query": user_input})
+                }
+            })
+            
+            # 创建一个模拟的 response
+            class MockToolCall:
+                def __init__(self, tool_dict):
+                    self.id = tool_dict["id"]
+                    self.function = type('', (), {})()
+                    self.function.name = tool_dict["function"]["name"]
+                    self.function.arguments = tool_dict["function"]["arguments"]
+            
+            class MockResponse:
+                def __init__(self, tool_list):
+                    self.content = "正在查询相关信息..."
+                    self.tool_calls = [MockToolCall(t) for t in tool_list]
+            
+            response = MockResponse(tools_to_call)
+        else:
+            # 正常流程 - 让 LLM 决定调用哪些工具
+            # 构建消息
+            messages = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
+            # 调用 LLM
+            response = self._call_llm(messages, use_tools=True)
+        
+        # 调试输出 - 查看最终调用的工具
+        if response.tool_calls:
+            print(f"\n[调试: 调用了 {len(response.tool_calls)} 个工具:")
+            for i, tc in enumerate(response.tool_calls):
+                print(f"  {i+1}. {tc.function.name}: {tc.function.arguments}")
         
         # 如果有工具调用，则执行工具并再次调用 LLM
         if response.tool_calls:
@@ -158,13 +221,28 @@ class KaraokeAssistantAgent:
             # 执行工具
             tool_responses = self._execute_tools(response.tool_calls)
             
-            # 添加工具响应到历史和消息
+            # 构建整合用的消息
+            messages_with_tools = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
+            
+            # 添加工具响应到消息
             for tool_resp in tool_responses:
+                messages_with_tools.append(tool_resp)
                 self.conversation_history.append(tool_resp)
-                messages.append(tool_resp)
+            
+            # 添加明确的整合提示
+            integration_prompt = """请根据上面工具返回的信息，整合出一个完整的回答。要求：
+1. 用自然流畅的语言组织
+2. 不同部分用清晰的标题或分段分开
+3. 确保包含所有工具返回的关键信息
+4. 不要遗漏任何一个工具的结果！"""
+            
+            messages_with_tools.append({
+                "role": "user",
+                "content": integration_prompt
+            })
             
             # 再次调用 LLM 整合结果
-            final_response = self._call_llm(messages, use_tools=False)
+            final_response = self._call_llm(messages_with_tools, use_tools=False)
         else:
             final_response = response
         
